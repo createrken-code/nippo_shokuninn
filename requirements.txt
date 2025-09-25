@@ -1,8 +1,17 @@
-line-bot-sdk>=3.7.0
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-Pillow
-reportlab
-flask
+# Web framework
+flask>=3.0.0
+
+# LINE Bot SDK (v3 完全対応版)
+line-bot-sdk>=3.11.0
+
+# PDF生成
+reportlab>=4.0.0
+
+# 画像処理
+pillow>=10.0.0
+
+# Google Drive API
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0
