@@ -27,17 +27,37 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
+
 # ===== PDF用フォント設定 =====
 pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
 
-# ===== スタイル =====
+# 共通スタイル
+styles = getSampleStyleSheet()
+
+japanese_title = ParagraphStyle(
+    'JapaneseTitle',
+    parent=styles['Title'],
+    fontName='HeiseiKakuGo-W5',
+    fontSize=18,
+    leading=22,
+)
+
 japanese_normal = ParagraphStyle(
     'JapaneseNormal',
+    parent=styles['Normal'],
     fontName='HeiseiKakuGo-W5',
     fontSize=12,
     leading=15,
-    alignment=TA_LEFT
 )
+
+japanese_heading = ParagraphStyle(
+    'JapaneseHeading',
+    parent=styles['Heading2'],
+    fontName='HeiseiKakuGo-W5',
+    fontSize=14,
+    leading=18,
+)
+
 
 # ===== ユーザー状態管理 =====
 user_states = {}
@@ -54,17 +74,20 @@ QUESTIONS = [
 # ===== PDF生成 =====
 def create_formatted_pdf_with_images(data_dict, image_paths=None):
     filename = f"daily_report_{datetime.date.today()}_formatted.pdf"
-    filepath = os.path.join("/tmp", filename)
+    filepath = os.path.join(os.getcwd(), filename)
 
     doc = SimpleDocTemplate(filepath, pagesize=A4)
-    styles = getSampleStyleSheet()
     elements = []
 
-    elements.append(Paragraph("日報職人 - 作業報告書", styles["Title"]))
-    elements.append(Spacer(1, 20))
-    elements.append(Paragraph(f"作成日: {datetime.date.today()}", styles["Normal"]))
+    # タイトル
+    elements.append(Paragraph("日報職人 - 作業報告書", japanese_title))
     elements.append(Spacer(1, 20))
 
+    # 作成日
+    elements.append(Paragraph(f"作成日: {datetime.date.today()}", japanese_normal))
+    elements.append(Spacer(1, 20))
+
+    # テーブル
     table_data = [
         ["作業者名", data_dict.get("作業者名", "未入力")],
         ["作業現場", data_dict.get("作業現場", "未入力")],
@@ -82,8 +105,9 @@ def create_formatted_pdf_with_images(data_dict, image_paths=None):
     elements.append(table)
     elements.append(Spacer(1, 30))
 
+    # 写真一覧
     if image_paths:
-        elements.append(Paragraph("写真一覧:", styles["Heading2"]))
+        elements.append(Paragraph("写真一覧:", japanese_heading))
         elements.append(Spacer(1, 10))
         for img_path in image_paths:
             try:
@@ -99,7 +123,7 @@ def create_formatted_pdf_with_images(data_dict, image_paths=None):
     doc.build(elements)
     return filepath
 
-# ===== Google Drive アップロード =====
+
 # ===== Google Drive アップロード =====
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
