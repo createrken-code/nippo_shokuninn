@@ -106,9 +106,14 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 import os
 
+import json
+import tempfile
+
 def get_drive_service():
-    creds = service_account.Credentials.from_service_account_file(
-        "service_account.json",
+    # Renderの環境変数からJSON文字列を読み込み
+    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    creds = service_account.Credentials.from_service_account_info(
+        service_account_info,
         scopes=["https://www.googleapis.com/auth/drive.file"]
     )
     return build("drive", "v3", credentials=creds)
