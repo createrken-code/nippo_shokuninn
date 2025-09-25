@@ -5,7 +5,7 @@ from PIL import Image as PILImage
 # ===== LINE SDK v3 =====
 from linebot.v3.messaging import MessagingApi, MessagingApiBlob
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.configuration import Configuration
+from linebot.v3 import Configuration
 from linebot.v3.api_client import ApiClient
 
 from linebot.v3.messaging import (
