@@ -2,15 +2,10 @@ from flask import Flask, request, abort
 import os, datetime, threading, json
 from PIL import Image as PILImage
 
-# ===== LINE SDK v3 =====
-from linebot.v3 import WebhookHandler, ApiClient, Configuration
-from linebot.v3.messaging import (
-    MessagingApi, MessagingApiBlob,
-    ReplyMessageRequest, PushMessageRequest,
-    TextMessage
-)
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
-from linebot.v3.exceptions import InvalidSignatureError
+# ===== LINE SDK (v3.11.0, 従来スタイル) =====
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, ImageMessage, TextSendMessage
 
 # ===== PDF生成 =====
 from reportlab.lib.pagesizes import A4
@@ -29,10 +24,7 @@ from google.oauth2 import service_account
 app = Flask(__name__)
 
 # ===== LINE設定 =====
-configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-api_client = ApiClient(configuration)
-messaging_api = MessagingApi(api_client)
-blob_api = MessagingApiBlob(api_client)
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
 # ===== PDF用フォント設定 =====
@@ -62,7 +54,7 @@ QUESTIONS = [
 # ===== PDF生成 =====
 def create_formatted_pdf_with_images(data_dict, image_paths=None):
     filename = f"daily_report_{datetime.date.today()}_formatted.pdf"
-    filepath = os.path.join("/tmp", filename)  # Renderは/tmpのみ書き込み可
+    filepath = os.path.join("/tmp", filename)
 
     doc = SimpleDocTemplate(filepath, pagesize=A4)
     styles = getSampleStyleSheet()
@@ -107,7 +99,6 @@ def create_formatted_pdf_with_images(data_dict, image_paths=None):
     doc.build(elements)
     return filepath
 
-
 # ===== Google Drive アップロード =====
 def get_drive_service():
     service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
@@ -140,7 +131,6 @@ def upload_to_drive(filepath, folder_id=None):
     file = service.files().get(fileId=file_id, fields="webViewLink").execute()
     return file["webViewLink"]
 
-
 # ===== Webhook =====
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -152,42 +142,34 @@ def callback():
         abort(400)
     return 'OK', 200
 
-
 # ===== 非同期PDF処理 =====
 def process_pdf_and_upload(user_id, answers, images):
     try:
         pdf_path = create_formatted_pdf_with_images(answers, images)
         drive_link = upload_to_drive(pdf_path)
 
-        messaging_api.push_message(
-            PushMessageRequest(
-                to=user_id,
-                messages=[TextMessage(text=f"✅ 日報PDFをGoogle Driveに保存しました！\n{drive_link}")]
-            )
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=f"✅ 日報PDFをGoogle Driveに保存しました！\n{drive_link}")
         )
     except Exception as e:
-        messaging_api.push_message(
-            PushMessageRequest(
-                to=user_id,
-                messages=[TextMessage(text=f"❌ エラーが発生しました: {e}")]
-            )
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=f"❌ エラーが発生しました: {e}")
         )
-
 
 # ===== メッセージ処理 =====
 @handler.add(MessageEvent)
 def handle_message(event):
-    if isinstance(event.message, TextMessageContent):
+    if isinstance(event.message, TextMessage):
         user_id = event.source.user_id
         user_text = event.message.text.strip()
 
         if user_text == "日報作成":
             user_states[user_id] = {"step": 0, "answers": {}, "images": []}
-            messaging_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=QUESTIONS[0])]
-                )
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=QUESTIONS[0])
             )
             return
 
@@ -200,20 +182,16 @@ def handle_message(event):
                 state["answers"][keys[step]] = user_text
                 state["step"] += 1
                 next_q = QUESTIONS[state["step"]]
-                messaging_api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text=next_q)]
-                    )
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=next_q)
                 )
 
             elif step == len(QUESTIONS) - 1:
                 if "完了" in user_text:
-                    messaging_api.reply_message(
-                        ReplyMessageRequest(
-                            reply_token=event.reply_token,
-                            messages=[TextMessage(text="📄 PDFを生成しています。しばらくお待ちください...")]
-                        )
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(text="📄 PDFを生成しています。しばらくお待ちください...")
                     )
                     threading.Thread(
                         target=process_pdf_and_upload,
@@ -221,21 +199,17 @@ def handle_message(event):
                     ).start()
                     del user_states[user_id]
                 else:
-                    messaging_api.reply_message(
-                        ReplyMessageRequest(
-                            reply_token=event.reply_token,
-                            messages=[TextMessage(text="写真を送るか「完了」と入力してください。")]
-                        )
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(text="写真を送るか「完了」と入力してください。")
                     )
 
-    elif isinstance(event.message, ImageMessageContent):
+    elif isinstance(event.message, ImageMessage):
         user_id = event.source.user_id
         if user_id not in user_states:
-            messaging_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="まず「日報作成」と入力してください。")]
-                )
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="まず「日報作成」と入力してください。")
             )
             return
 
@@ -244,10 +218,11 @@ def handle_message(event):
 
         if step == len(QUESTIONS) - 1:
             message_id = event.message.id
-            content = blob_api.get_message_content(message_id)
             image_path = f"/tmp/received_{message_id}.jpg"
+            content = line_bot_api.get_message_content(message_id)
             with open(image_path, "wb") as f:
-                f.write(content)
+                for chunk in content.iter_content():
+                    f.write(chunk)
 
             try:
                 img = PILImage.open(image_path).convert("RGB")
@@ -256,15 +231,12 @@ def handle_message(event):
                 print("画像変換エラー:", e)
 
             state["images"].append(image_path)
-            messaging_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"📷 写真を受け取りました！現在 {len(state['images'])} 枚。続けて送るか「完了」と入力してください。")]
-                )
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=f"📷 写真を受け取りました！現在 {len(state['images'])} 枚。続けて送るか「完了」と入力してください。")
             )
 
-
 if __name__ == "__main__":
-    print("=== Flaskを起動します (Render対応 v3版) ===")
+    print("=== Flaskを起動します (Render対応 v1/v3.11.0) ===")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
