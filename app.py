@@ -108,7 +108,7 @@ def get_drive_service():
     )
     return build("drive", "v3", credentials=creds)
 
-def upload_to_drive(filepath, folder_id=None):
+def upload_to_drive(filepath, folder_id="1P_u7sKNlydIn7sZl9J-y6jtsdyhEjVGn?usp"):
     service = get_drive_service()
     file_metadata = {"name": os.path.basename(filepath)}
     if folder_id:
