@@ -1,11 +1,11 @@
 import os
 from flask import Flask, request, abort
 
-# LINE SDK v3
-from linebot.v3.webhooks import WebhookHandler
-from linebot.v3.messaging import MessagingApi
-from linebot.v3.messaging.models import PushMessageRequest, TextMessage
-from linebot.v3.exceptions import InvalidSignatureError
+# LINE SDK v1
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
 
 # Flask アプリ作成
 app = Flask(__name__)
@@ -15,10 +15,9 @@ CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
 # Webhook handler
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
-# Messaging API クライアント
-api = MessagingApi(channel_access_token=CHANNEL_ACCESS_TOKEN)
 
 
 # Webhook エンドポイント
