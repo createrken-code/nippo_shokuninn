@@ -100,36 +100,56 @@ def create_formatted_pdf_with_images(data_dict, image_paths=None):
     return filepath
 
 # ===== Google Drive アップロード =====
+# ===== Google Drive アップロード =====
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2 import service_account
+import os
+
 def get_drive_service():
-    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-    creds = service_account.Credentials.from_service_account_info(
-        service_account_info,
+    creds = service_account.Credentials.from_service_account_file(
+        "service_account.json",
         scopes=["https://www.googleapis.com/auth/drive.file"]
     )
     return build("drive", "v3", credentials=creds)
 
-def upload_to_drive(filepath, folder_id="1QF_iSwNhJryka6OnPsq7LWebFxoJuS9F"):
+DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")  # ← Renderの環境変数に設定
+
+def upload_to_drive(filepath, folder_id=None):
     service = get_drive_service()
+    folder_id = folder_id or DRIVE_FOLDER_ID
+
     file_metadata = {"name": os.path.basename(filepath)}
     if folder_id:
         file_metadata["parents"] = [folder_id]
 
     media = MediaFileUpload(filepath, mimetype="application/pdf")
-    file = service.files().create(
+
+    # 共有ドライブ対応: supportsAllDrives=True を必ず付ける
+    created = service.files().create(
         body=file_metadata,
         media_body=media,
-        fields="id"
+        fields="id, webViewLink, parents",
+        supportsAllDrives=True
     ).execute()
 
-    file_id = file["id"]
+    file_id = created["id"]
 
+    # リンク共有を有効化（これも supportsAllDrives を付ける）
     service.permissions().create(
         fileId=file_id,
-        body={"role": "reader", "type": "anyone"}
+        body={"role": "reader", "type": "anyone"},
+        supportsAllDrives=True
     ).execute()
 
-    file = service.files().get(fileId=file_id, fields="webViewLink").execute()
-    return file["webViewLink"]
+    got = service.files().get(
+        fileId=file_id,
+        fields="webViewLink",
+        supportsAllDrives=True
+    ).execute()
+
+    return got["webViewLink"]
+
 
 # ===== Webhook =====
 @app.route("/callback", methods=['POST'])
